@@ -19,7 +19,7 @@ jobs:
       - name: Checkout Master
         uses: actions/checkout@v2
         with:
-          ref: master
+          ref: CI
           fetch-depth: 1000
 
       - name: Checkout
