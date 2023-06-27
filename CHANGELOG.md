@@ -8,6 +8,7 @@
 * [Doc] Document --persist-replace in API section (#539)
 * [Fix] Fixed CI issue by updating `invalid_connection_string_duckdb` in `test_magic.py` (#631)
 * [Fix] Refactored `ResultSet` to lazy loading (#470)
+* [Fix] Erro when executing multiple SQL statements when using DuckDB with `autopandas` on
 
 ## 0.7.9 (2023-06-19)
 

@@ -27,3 +27,12 @@ def test_auto_commit_mode_off(ip_with_duckDB, caplog):
     # Check the tables is created
     tables_out = ip_with_duckDB.run_cell("%sql SHOW TABLES;").result
     assert any("weather" == table[0] for table in tables_out)
+
+
+def test_autopandas_with_multiple_statements(ip_with_duckDB):
+    ip_with_duckDB.run_cell("%config SqlMagic.autopandas=True")
+    out = ip_with_duckDB.run_cell(
+        "%sql SELECT * FROM weather LIMIT 3; SELECT * FROM weather LIMIT 3;"
+    )
+
+    assert out.error_in_exec is None

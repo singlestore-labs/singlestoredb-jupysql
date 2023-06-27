@@ -612,8 +612,8 @@ def run(conn, sql, config):
                 statement = sqlalchemy.sql.text(statement)
 
             if duckdb_autopandas:
-                conn = conn.engine.raw_connection()
-                cursor = conn.cursor()
+                conn_duckdb_raw = conn.engine.raw_connection()
+                cursor = conn_duckdb_raw.cursor()
                 cursor.execute(str(statement))
 
             else:
@@ -627,7 +627,7 @@ def run(conn, sql, config):
     # bypass ResultSet and use duckdb's native method to return a pandas data frame
     if duckdb_autopandas:
         df = cursor.df()
-        conn.close()
+        conn_duckdb_raw.close()
         return df
     else:
         resultset = ResultSet(result, config)
