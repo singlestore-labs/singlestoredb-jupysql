@@ -27,3 +27,8 @@ def test_auto_commit_mode_off(ip_with_duckDB, caplog):
     # Check the tables is created
     tables_out = ip_with_duckDB.run_cell("%sql SHOW TABLES;").result
     assert any("weather" == table[0] for table in tables_out)
+
+
+def test_select(ip_with_duckDB, caplog):
+    res = ip_with_duckDB.run_cell("%sql select * from weather;")
+    assert res.error_in_exec is None
