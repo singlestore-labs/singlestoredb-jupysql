@@ -1,5 +1,7 @@
 import logging
 
+import pytest
+
 
 def test_auto_commit_mode_on(ip_with_duckDB, caplog):
     with caplog.at_level(logging.DEBUG):
@@ -29,10 +31,34 @@ def test_auto_commit_mode_off(ip_with_duckDB, caplog):
     assert any("weather" == table[0] for table in tables_out)
 
 
-def test_autopandas_with_multiple_statements(ip_empty):
+@pytest.mark.parametrize(
+    "config",
+    [
+        "SqlMagic.autopandas=True",
+        "SqlMagic.autopandas=False",
+    ],
+    ids=[
+        "autopandas_on",
+        "autopandas_off",
+    ],
+)
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "%sql SELECT * FROM weather; SELECT * FROM weather;",
+        "%sql CREATE TABLE names (name VARCHAR,); SELECT * FROM weather;",
+    ],
+    ids=[
+        "multiple_selects",
+        "multiple_statements",
+    ],
+)
+def test_multiple_statements(ip_empty, config, sql):
     ip_empty.run_cell("%sql duckdb://")
-    # ip_empty.run_cell("%config SqlMagic.autopandas=True")
+    ip_empty.run_cell(config)
     ip_empty.run_cell("%sql CREATE TABLE weather (city VARCHAR,);")
-    out = ip_empty.run_cell("%sql SELECT * FROM weather; SELECT * FROM weather;")
+    ip_empty.run_cell("%sql INSERT INTO weather VALUES ('NYC');")
+    out = ip_empty.run_cell(sql)
 
     assert out.error_in_exec is None
+    assert out.result.dict() == {"city": ("NYC",)}

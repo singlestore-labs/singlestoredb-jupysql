@@ -590,9 +590,13 @@ def run(conn, sql, config):
         # returning only when sql is empty string
         return "Connected: %s" % conn.name
 
-    for statement in sqlparse.split(sql):
-        first_word = sql.strip().split()[0].lower()
+    statements = sqlparse.split(sql)
+    last_statement_is_select = _first_word(statements[-1])
+
+    for index, statement in enumerate(statements):
+        first_word = _first_word(statement)
         manual_commit = False
+        is_last_statement = index == len(statements) - 1
 
         # attempting to run a transaction
         if first_word == "begin":
@@ -611,7 +615,7 @@ def run(conn, sql, config):
             if not is_custom_connection:
                 statement = sqlalchemy.sql.text(statement)
 
-            if duckdb_autopandas:
+            if duckdb_autopandas and last_statement_is_select and is_last_statement:
                 conn_duckdb_raw = conn.engine.raw_connection()
                 cursor = conn_duckdb_raw.cursor()
                 cursor.execute(str(statement))
@@ -625,7 +629,7 @@ def run(conn, sql, config):
                         display_affected_rowcount(result.rowcount)
 
     # bypass ResultSet and use duckdb's native method to return a pandas data frame
-    if duckdb_autopandas:
+    if duckdb_autopandas and last_statement_is_select:
         df = cursor.df()
         conn_duckdb_raw.close()
         return df
@@ -635,6 +639,10 @@ def run(conn, sql, config):
         # lazy load
         resultset.fetch_results()
         return select_df_type(resultset, config)
+
+
+def _first_word(sql):
+    return sql.strip().split()[0].lower()
 
 
 def raw_run(conn, sql):
