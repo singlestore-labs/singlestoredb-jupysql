@@ -641,7 +641,7 @@ def run(conn, sql, config):
 
             # NOTE: are thre any edge cases we should cover?
             if not is_select:
-                with Session(conn.engine, expire_on_commit=False) as session:
+                with Session(conn.engine) as session:
                     result = session.execute(statement)
                     resultset = ResultSet(result, config, statement, conn.engine)
                     session.commit()
