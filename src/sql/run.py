@@ -262,14 +262,6 @@ class ResultSet(ColumnGuesserMixin):
         #     "connection_info"
         # ] = Connection.current._get_curr_sqlalchemy_connection_info()
 
-        # TODO: test with generic db connection
-        self.sqlaproxy.dialect.name
-
-        # list(self.engine.execute(self.sql))
-
-        # if not self.has_more_results:
-        #     return pd.DataFrame()
-
         if self.did_finish_fetching():
             return pd.DataFrame(self, columns=(self and self.keys) or [])
 
@@ -440,11 +432,6 @@ class ResultSet(ColumnGuesserMixin):
 
             self.extend_results(returned)
 
-            # if "SELECT * FROM number_table" in str(self.sql):
-            #     from ipdb import set_trace
-
-            #     set_trace()
-
             if len(returned) < size:
                 self.done_fetching()
 
@@ -477,69 +464,6 @@ class ResultSet(ColumnGuesserMixin):
             pretty.set_style(_style)
 
         return pretty
-
-    def _fetch_query_results(self, fetch_all=False):
-        """
-        Returns rows of a query result as a list of tuples.
-
-        Parameters
-        ----------
-        fetch_all : bool default False
-            Return all query rows
-        """
-        _should_try_lazy_fetch = hasattr(self.sqlaproxy, "_soft_closed")
-
-        _should_fetch_all = (
-            (self.config.displaylimit == 0 or not self.config.displaylimit)
-            or fetch_all
-            or not _should_try_lazy_fetch
-        )
-
-        is_autolimit = (
-            isinstance(self.config.autolimit, int) and self.config.autolimit > 0
-        )
-        is_connection_closed = (
-            self.sqlaproxy._soft_closed if _should_try_lazy_fetch else False
-        )
-
-        should_return_results = is_connection_closed or (
-            len(self._results) > 0 and is_autolimit
-        )
-
-        if should_return_results:
-            # this means we already loaded all
-            # the results to self._results or we use
-            # autolimit and shouldn't fetch more
-            results = self._results
-        else:
-            if is_autolimit:
-                results = self.sqlaproxy.fetchmany(size=self.config.autolimit)
-            else:
-                if _should_fetch_all:
-                    all_results = self.sqlaproxy.fetchall()
-                    results = self._results + all_results
-                    self._results = results
-                else:
-                    # operational errors are silenced!
-                    try:
-                        results = self.sqlaproxy.fetchmany(
-                            size=self.config.displaylimit
-                        )
-                    except Exception as e:
-                        raise RuntimeError("Could not fetch from database") from e
-
-                if _should_try_lazy_fetch:
-                    # Try to fetch an extra row to find out
-                    # if there are more results to fetch
-                    row = self.sqlaproxy.fetchone()
-                    if row is not None:
-                        results += [row]
-
-        # Check if we have more rows to show
-        if self.config.displaylimit > 0:
-            self.truncated = len(results) > self.config.displaylimit
-
-        return results
 
 
 def display_affected_rowcount(rowcount):
@@ -669,7 +593,6 @@ def select_df_type(resultset, config):
         return resultset.PolarsDataFrame(**config.polars_dataframe_kwargs)
     else:
         return resultset
-    # returning only last result, intentionally
 
 
 def run(conn, sql, config):
@@ -716,6 +639,7 @@ def run(conn, sql, config):
             if not is_custom_connection:
                 statement = sqlalchemy.sql.text(statement)
 
+            # NOTE: are thre any edge cases we should cover?
             if not is_select:
                 with Session(conn.engine, expire_on_commit=False) as session:
                     result = session.execute(statement)
@@ -730,7 +654,6 @@ def run(conn, sql, config):
                 if hasattr(result, "rowcount"):
                     display_affected_rowcount(result.rowcount)
 
-    # resultset = ResultSet(result, config, statement, conn.engine)
     return select_df_type(resultset, config)
 
 
