@@ -203,6 +203,8 @@ class Connection:
         )
 
         self.dialect = engine.url.get_dialect()
+
+        # TODO: delete this!
         self.session = self._create_session(engine, self.url)
 
         self.connections[alias or self.url] = self

@@ -18,7 +18,7 @@ def _get_inspector(conn):
     if not Connection.current:
         raise exceptions.RuntimeError("No active connection")
     else:
-        return inspect(Connection.current.session)
+        return inspect(Connection.current.engine)
 
 
 class DatabaseInspection:
