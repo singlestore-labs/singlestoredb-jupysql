@@ -556,6 +556,7 @@ def _histogram(table, column, bins, with_=None, conn=None, facet=None):
     if bin_[0] is None:
         raise ValueError("Data contains NULLs")
 
+    print("bin_size: ", bin_size)
     return bin_, height, bin_size
 
 
