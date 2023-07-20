@@ -99,13 +99,18 @@ def test_validate_arguments(tmp_empty, ip, cell, error_type, error_message):
         "%sqlplot box --table data.csv --column x",
         "%sqlplot boxplot --table data.csv --column x --orient h",
         "%sqlplot boxplot --table subset --column x",
+        "%sqlplot boxplot --table subset --column x --with subset",
         "%sqlplot boxplot -t subset -c x -w subset -o h",
         "%sqlplot boxplot --table nas.csv --column x",
         "%sqlplot bar -t data.csv -c x",
+        "%sqlplot bar --table subset --column x",
+        "%sqlplot bar --table subset --column x --with subset",
         "%sqlplot bar -t data.csv -c x -S",
         "%sqlplot bar -t data.csv -c x -o h",
         "%sqlplot bar -t data.csv -c x y",
         "%sqlplot pie -t data.csv -c x",
+        "%sqlplot pie --table subset --column x",
+        "%sqlplot pie --table subset --column x --with subset",
         "%sqlplot pie -t data.csv -c x -S",
         "%sqlplot pie -t data.csv -c x y",
         '%sqlplot boxplot --table spaces.csv --column "some column"',
@@ -147,16 +152,21 @@ def test_validate_arguments(tmp_empty, ip, cell, error_type, error_message):
         "histogram-bins",
         "histogram-nas",
         "boxplot",
+        "boxplot-with",
         "box",
         "boxplot-horizontal",
         "boxplot-with",
         "boxplot-shortcuts",
         "boxplot-nas",
         "bar-1-col",
+        "bar-subset",
+        "bar-subset-with",
         "bar-1-col-show_num",
         "bar-1-col-horizontal",
         "bar-2-col",
         "pie-1-col",
+        "pie-subset",
+        "pie-subset-with",
         "pie-1-col-show_num",
         "pie-2-col",
         "boxplot-column-name-with-spaces",
@@ -349,21 +359,71 @@ def test_pie_two_col(load_data_two_col, ip):
     ip.run_cell("%sqlplot pie -t data_two.csv -c x y")
 
 
-def test_sqlplot_deprecation_warning(ip_snippets, capsys):
-    with pytest.warns(FutureWarning) as record:
-        res = ip_snippets.run_cell(
-            "%sqlplot boxplot --table subset --column x --with subset"
-        )
-    assert len(record) == 1
-    assert (
-        "CTE dependencies are now automatically inferred,"
-        " you can omit the --with arguments. Using --with will "
-        "raise an exception in the next major release so please "
-        "remove it." in record[0].message.args[0]
+@_cleanup_cm()
+@image_comparison(baseline_images=["boxplot"], extensions=["png"], remove_text=True)
+def test_boxplot(load_penguin, ip):
+    ip.run_cell("%sqlplot boxplot --table penguins.csv --column body_mass_g")
+
+
+@_cleanup_cm()
+@image_comparison(baseline_images=["boxplot_h"], extensions=["png"], remove_text=True)
+def test_boxplot_h(load_penguin, ip):
+    ip.run_cell("%sqlplot boxplot --table penguins.csv --column body_mass_g --orient h")
+
+
+@_cleanup_cm()
+@image_comparison(baseline_images=["boxplot_two"], extensions=["png"], remove_text=True)
+def test_boxplot_two_col(load_penguin, ip):
+    ip.run_cell(
+        "%sqlplot boxplot --table penguins.csv --column bill_length_mm "
+        "bill_depth_mm flipper_length_mm"
     )
-    out, err = capsys.readouterr()
-    assert type(res.result).__name__ in {"Axes", "AxesSubplot"}
-    assert "Plotting using saved snippet : subset" in out
+
+
+@_cleanup_cm()
+@image_comparison(
+    baseline_images=["boxplot_null"], extensions=["png"], remove_text=True
+)
+def test_boxplot_null(load_penguin, ip):
+    ip.run_cell("%sqlplot boxplot --table penguins.csv --column bill_length_mm ")
+
+
+@_cleanup_cm()
+@image_comparison(baseline_images=["hist"], extensions=["png"], remove_text=True)
+def test_hist(load_penguin, ip):
+    ip.run_cell("%sqlplot histogram --table penguins.csv --column body_mass_g")
+
+
+@_cleanup_cm()
+@image_comparison(baseline_images=["hist_bin"], extensions=["png"], remove_text=True)
+def test_hist_bin(load_penguin, ip):
+    ip.run_cell(
+        "%sqlplot histogram --table penguins.csv --column body_mass_g --bins 300"
+    )
+
+
+@_cleanup_cm()
+@image_comparison(baseline_images=["hist_two"], extensions=["png"], remove_text=True)
+def test_hist_two(load_penguin, ip):
+    ip.run_cell(
+        "%sqlplot histogram --table penguins.csv --column bill_length_mm bill_depth_mm"
+    )
+
+
+@_cleanup_cm()
+@image_comparison(baseline_images=["hist_null"], extensions=["png"], remove_text=True)
+def test_hist_null(load_penguin, ip):
+    ip.run_cell("%sqlplot histogram --table penguins.csv --column bill_length_mm ")
+
+
+@_cleanup_cm()
+@image_comparison(baseline_images=["hist_custom"], extensions=["png"], remove_text=True)
+def test_hist_cust(load_penguin, ip):
+    ax = ip.run_cell(
+        "%sqlplot histogram --table penguins.csv --column bill_length_mm "
+    ).result
+    ax.set_title("Custom Title")
+    _ = ax.grid(True)
 
 
 @pytest.mark.parametrize(
@@ -387,3 +447,15 @@ def test_sqlplot_snippet_typo(ip_snippets, capsys):
     ip_snippets.run_cell("%sqlplot boxplot --table subst --column x")
     out, err = capsys.readouterr()
     assert TABLE_NAME_TYPO_MSG.strip() == err.strip()
+
+
+MISSING_TABLE_ERROR_MSG = """
+UsageError: There is no table with name 'missing' in the default schema
+If you need help solving this issue, send us a message: https://ploomber.io/community
+"""
+
+
+def test_sqlplot_missing_table(ip_snippets, capsys):
+    ip_snippets.run_cell("%sqlplot boxplot --table missing --column x")
+    out, err = capsys.readouterr()
+    assert MISSING_TABLE_ERROR_MSG.strip() == err.strip()

@@ -6,7 +6,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.exc import ResourceClosedError
 
 import sql.connection
-from sql.connection import Connection, CustomConnection
+from sql.connection import Connection, DBAPIConnection
 from IPython.core.error import UsageError
 import sqlglot
 import sqlalchemy
@@ -337,7 +337,7 @@ class dummy_connection:
     [
         [sqlite3.connect(""), True],
         [
-            CustomConnection(engine=sqlalchemy.create_engine("sqlite://")),
+            DBAPIConnection(engine=sqlalchemy.create_engine("sqlite://")),
             True,
         ],
         [
@@ -350,15 +350,15 @@ class dummy_connection:
     ],
     ids=[
         "sqlite3_connection",
-        "custom_connection",
+        "dbapi_connection",
         "normal_connection",
         "dummy_connection",
         "str",
         "int",
     ],
 )
-def test_custom_connection(conn, expected):
-    is_custom = Connection.is_custom_connection(conn)
+def test_dbapi_connection(conn, expected):
+    is_custom = Connection.is_dbapi_connection(conn)
     assert is_custom == expected
 
 
@@ -377,3 +377,27 @@ def test_close_all(ip_empty):
         connections_copy["duckdb://"].execute("").fetchall()
 
     assert not Connection.connections
+
+
+@pytest.mark.parametrize(
+    "old_alias, new_alias",
+    [
+        (None, "duck1"),
+        ("duck1", "duck2"),
+        (None, None),
+    ],
+)
+def test_new_connection_with_alias(ip_empty, old_alias, new_alias):
+    """Test if a new connection with the same url but a
+    new alias is registered for different cases of old alias
+    """
+    ip_empty.run_cell(f"%sql duckdb:// --alias {old_alias}")
+    ip_empty.run_cell(f"%sql duckdb:// --alias {new_alias}")
+    table = ip_empty.run_cell("sql --connections").result
+    if old_alias is None and new_alias is None:
+        assert new_alias not in table
+    else:
+        connection = table[new_alias]
+        assert connection
+        assert connection.url == "duckdb://"
+        assert connection == connection.current

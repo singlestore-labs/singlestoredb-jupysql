@@ -1,3 +1,6 @@
+# CI - DB Integration - Local is designed to run integration testing against to databases hosted by docker containers
+# Target database: PostgreSQL, MySQL, MariaDB, SQLite, DuckDB, MSSQL, Oracle Database
+# Sqlalchemy version: 2+
 name: CI - DB Integration - Local
 on:
   workflow_call:
@@ -9,8 +12,14 @@ jobs:
         python-version: ['3.11']
         os: [ubuntu-latest]
     runs-on: ${{ matrix.os }}
+
+    env:
+      PLOOMBER_VERSION_CHECK_DISABLED: true
+
     steps:
-      - uses: actions/checkout@v2
+
+      - name: Checkout
+        uses: actions/checkout@v2
 
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v2
@@ -35,3 +44,10 @@ jobs:
           # Run the integration test by pytest marker
           python -c "import sqlalchemy; print('Sqlalchemy version ', sqlalchemy.__version__)"
           pytest src/tests/integration --verbose
+
+      - name: Upload failed images artifacts
+        uses: actions/upload-artifact@v3
+        if: failure()
+        with:
+          name: failed-image-artifacts-integration ${{ matrix.os }} ${{ matrix.python-version }}
+          path: result_images/

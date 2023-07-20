@@ -16,12 +16,16 @@ from IPython.core.magic import (
 )
 from IPython.core.magic_arguments import argument, magic_arguments, parse_argstring
 from sqlalchemy.exc import OperationalError, ProgrammingError, DatabaseError
+from traitlets.config.configurable import Configurable
+from traitlets import Bool, Int, TraitError, Unicode, Dict, observe, validate
 
 import warnings
+import shlex
 from difflib import get_close_matches
 import sql.connection
 import sql.parse
 import sql.run
+from sql.parse import _option_strings_from_parser
 from sql import display, exceptions
 from sql.store import store
 from sql.command import SQLCommand
@@ -29,12 +33,12 @@ from sql.magic_plot import SqlPlotMagic
 from sql.magic_cmd import SqlCmdMagic
 from sql._patch import patch_ipython_usage_error
 from sql import query_util
-from sql.util import get_suggestions_message, show_deprecation_warning
-from ploomber_core.dependencies import check_installed
-
+from sql.util import get_suggestions_message, pretty_print
+from sql.exceptions import RuntimeError
 from sql.error_message import detail
-from traitlets.config.configurable import Configurable
-from traitlets import Bool, Int, TraitError, Unicode, Dict, observe, validate
+
+
+from ploomber_core.dependencies import check_installed
 
 
 try:
@@ -70,6 +74,13 @@ class RenderMagic(Magics):
     @telemetry.log_call("sqlrender")
     def sqlrender(self, line):
         args = parse_argstring(self.sqlrender, line)
+        warnings.warn(
+            "\n'%sqlrender' will be deprecated soon, "
+            f"please use '%sqlcmd snippets {args.line[0]}' instead. "
+            "\n\nFor documentation, follow this link : "
+            "https://jupysql.ploomber.io/en/latest/api/magic-snippets.html#id1",
+            FutureWarning,
+        )
         return str(store[args.line[0]])
 
 
@@ -91,7 +102,8 @@ class SqlMagic(Magics, Configurable):
         config=True,
         help=(
             "Set the table printing style to any of prettytable's "
-            "defined styles (currently DEFAULT, MSWORD_FRIENDLY, PLAIN_COLUMNS, RANDOM)"
+            "defined styles (currently DEFAULT, MSWORD_FRIENDLY, PLAIN_COLUMNS, "
+            "RANDOM, SINGLE_BORDER, DOUBLE_BORDER, MARKDOWN )"
         ),
     )
     short_errors = Bool(
@@ -100,7 +112,7 @@ class SqlMagic(Magics, Configurable):
         help="Don't display the full traceback on SQL Programming Error",
     )
     displaylimit = Int(
-        sql.run.DEFAULT_DISPLAYLIMIT_VALUE,
+        10,
         config=True,
         allow_none=True,
         help=(
@@ -158,7 +170,7 @@ class SqlMagic(Magics, Configurable):
     @validate("displaylimit")
     def _valid_displaylimit(self, proposal):
         if proposal["value"] is None:
-            print("displaylimit: Value None will be treated as 0 (no limit)")
+            display.message("displaylimit: Value None will be treated as 0 (no limit)")
             return 0
         try:
             value = int(proposal["value"])
@@ -178,7 +190,60 @@ class SqlMagic(Magics, Configurable):
             other = "autopolars" if change["name"] == "autopandas" else "autopandas"
             if getattr(self, other):
                 setattr(self, other, False)
-                print(f"Disabled '{other}' since '{change['name']}' was enabled.")
+                display.message(
+                    f"Disabled '{other}' since '{change['name']}' was enabled."
+                )
+
+    def check_random_arguments(self, line="", cell=""):
+        # check only for cell magic
+        if cell != "":
+            tokens = shlex.split(line, posix=False)
+            arguments = []
+
+            # Iterate through the tokens to separate arguments and SQL code
+            # If the token starts with "--", it is an argument
+            breakLoop = False
+            for token in tokens:
+                if token.startswith("--") or token.startswith("-"):
+                    arguments.append(token)
+                    breakLoop = True
+                else:
+                    if breakLoop:
+                        break
+
+            declared_argument = _option_strings_from_parser(SqlMagic.execute.parser)
+            for check_argument in arguments:
+                if check_argument not in declared_argument:
+                    raise exceptions.UsageError(
+                        "Unrecognized argument(s): {}".format(check_argument)
+                    )
+
+    def _error_handling(self, e, query):
+        detailed_msg = detail(e)
+        if self.short_errors:
+            if detailed_msg is not None:
+                raise exceptions.RuntimeError(detailed_msg) from e
+                # TODO: move to error_messages.py
+                # Added here due to circular dependency issue (#545)
+            elif "no such table" in str(e):
+                tables = query_util.extract_tables_from_query(query)
+                for table in tables:
+                    suggestions = get_close_matches(table, list(self._store))
+                    err_message = f"There is no table with name {table!r}."
+                    # with_message = "Alternatively, please specify table
+                    # name using --with argument"
+                    if len(suggestions) > 0:
+                        suggestions_message = get_suggestions_message(suggestions)
+                        raise exceptions.TableNotFoundError(
+                            f"{err_message}{suggestions_message}"
+                        ) from e
+
+            raise RuntimeError(str(e)) from e
+        else:
+            if detailed_msg is not None:
+                display.message(detailed_msg)
+            e.modify_exception = True
+            raise e
 
     @no_var_expand
     @needs_local_scope
@@ -315,6 +380,9 @@ class SqlMagic(Magics, Configurable):
 
         # %%sql {line}
         # {cell}
+
+        self.check_random_arguments(line, cell)
+
         if local_ns is None:
             local_ns = {}
 
@@ -327,12 +395,17 @@ class SqlMagic(Magics, Configurable):
 
         args = command.args
 
-        with_ = self._store.infer_dependencies(command.sql_original, args.save)
-        if with_:
-            command.set_sql_with(with_)
-            print(f"Generating CTE with stored snippets : {', '.join(with_)}")
+        if args.with_:
+            with_ = args.with_
         else:
-            with_ = None
+            with_ = self._store.infer_dependencies(command.sql_original, args.save)
+            if with_:
+                command.set_sql_with(with_)
+                display.message(
+                    f"Generating CTE with stored snippets: {pretty_print(with_)}"
+                )
+            else:
+                with_ = None
 
         # Create the interactive slider
         if args.interact and not is_interactive_mode:
@@ -340,7 +413,7 @@ class SqlMagic(Magics, Configurable):
             interactive_dict = {}
             for key in args.interact:
                 interactive_dict[key] = local_ns[key]
-            print(
+            display.message(
                 "Interactive mode, please interact with below "
                 "widget(s) to control the variable"
             )
@@ -349,7 +422,9 @@ class SqlMagic(Magics, Configurable):
         if args.connections:
             return sql.connection.Connection.connections_table()
         elif args.close:
-            return sql.connection.Connection.close(args.close)
+            return sql.connection.Connection.close_connection_with_descriptor(
+                args.close
+            )
 
         connect_arg = command.connection
 
@@ -368,7 +443,7 @@ class SqlMagic(Magics, Configurable):
                         raw_args = raw_args[1:-1]
                 args.connection_arguments = json.loads(raw_args)
             except Exception as e:
-                print(e)
+                display.message(str(e))
                 raise e
         else:
             args.connection_arguments = {}
@@ -421,8 +496,7 @@ class SqlMagic(Magics, Configurable):
 
         if not command.sql:
             return
-        if args.with_:
-            show_deprecation_warning()
+
         # store the query if needed
         if args.save:
             if "-" in args.save:
@@ -457,7 +531,7 @@ class SqlMagic(Magics, Configurable):
                     result = result.dict()
 
                 if self.feedback:
-                    print(
+                    display.message(
                         "Returning data to local variables [{}]".format(", ".join(keys))
                     )
 
@@ -477,30 +551,12 @@ class SqlMagic(Magics, Configurable):
         # JA: added DatabaseError for MySQL
         except (ProgrammingError, OperationalError, DatabaseError) as e:
             # Sqlite apparently return all errors as OperationalError :/
-            detailed_msg = detail(e, command.sql)
-            if self.short_errors:
-                if detailed_msg is not None:
-                    err = exceptions.UsageError(detailed_msg)
-                    raise err
-                    # TODO: move to error_messages.py
-                    # Added here due to circular dependency issue (#545)
-                elif "no such table" in str(e):
-                    tables = query_util.extract_tables_from_query(command.sql)
-                    for table in tables:
-                        suggestions = get_close_matches(table, list(self._store))
-                        if len(suggestions) > 0:
-                            err_message = f"There is no table with name {table!r}."
-                            suggestions_message = get_suggestions_message(suggestions)
-                            raise exceptions.TableNotFoundError(
-                                f"{err_message}{suggestions_message}"
-                            )
-                    print(e)
-                else:
-                    print(e)
+            self._error_handling(e, command.sql)
+        except Exception as e:
+            # handle DuckDB exceptions
+            if "Catalog Error" in str(e):
+                self._error_handling(e, command.sql)
             else:
-                if detailed_msg is not None:
-                    print(detailed_msg)
-                e.modify_exception = True
                 raise e
 
     legal_sql_identifier = re.compile(r"^[A-Za-z0-9#_$]+")
@@ -555,9 +611,7 @@ class SqlMagic(Magics, Configurable):
             if_exists = "fail"
 
         try:
-            frame.to_sql(
-                table_name, conn.session.engine, if_exists=if_exists, index=index
-            )
+            frame.to_sql(table_name, conn.session, if_exists=if_exists, index=index)
         except ValueError:
             raise exceptions.ValueError(
                 f"""Table {table_name!r} already exists. Consider using \

@@ -28,7 +28,6 @@ install_requires = [
     "sqlglot>=11.3.7",
     "ploomber-core>=0.2.7",
     'importlib-metadata;python_version<"3.8"',
-    "psutil",
 ]
 
 DEV = [
@@ -36,6 +35,7 @@ DEV = [
     "pytest",
     "pandas",
     "polars==0.17.2",  # 04/18/23 this breaks our CI
+    "pyarrow",
     "invoke",
     "pkgmt",
     "twine",
@@ -50,6 +50,7 @@ DEV = [
     "ipywidgets",
     # for running tests for %sqlcmd explore --table
     "js2py",
+    "jupysql-plugin",
 ]
 
 # dependencies for running integration tests

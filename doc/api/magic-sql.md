@@ -5,7 +5,7 @@ jupytext:
     extension: .md
     format_name: myst
     format_version: 0.13
-    jupytext_version: 1.14.5
+    jupytext_version: 1.14.6
 kernelspec:
   display_name: Python 3 (ipykernel)
   language: python
@@ -19,6 +19,10 @@ myst:
 
 # `%sql`/`%%sql`
 
+```{note}
+You can view the documentation and command line arguments by running `%sql?`
+```
+
 ``-l`` / ``--connections``
     List all active connections ([example](#list-connections))
 
@@ -26,7 +30,7 @@ myst:
     Close named connection ([example](#close-connection))
 
 ``-c`` / ``--creator <creator-function>``
-    Specify creator function for new connection
+    Specify creator function for new connection ([example](#specify-creator-function))
 
 ``-s`` / ``--section <section-name>``
     Section of dsn_file to be used for generating a connection string
@@ -36,6 +40,9 @@ myst:
 
 ``--append``
     Like ``--persist``, but appends to the table if it already exists ([example](#append-to-table))
+
+``--persist-replace``
+    Like ``--persist``, but it will drop the existing table before inserting the new table ([example](#persist-replace-to-table))
 
 ``-a`` / ``--connection_arguments <"{connection arguments}">``
     Specify dictionary of connection arguments to pass to SQL driver
@@ -136,6 +143,26 @@ Or pass an alias (**added in 0.5.2**):
 %sql --close db-two
 ```
 
+## Specify creator function
+
+```{code-cell} ipython3
+import os
+import sqlite3
+
+# Set environment variable $DATABASE_URL
+os.environ["DATABASE_URL"] = "sqlite:///"
+
+# Define a function that returns a DBAPI connection
+
+
+def creator():
+    return sqlite3.connect("")
+```
+
+```{code-cell} ipython3
+%sql --creator creator
+```
+
 ## Create table
 
 ```{code-cell} ipython3
@@ -179,6 +206,20 @@ my_data = pd.DataFrame({"x": range(3, 6), "y": range(3, 6)})
 
 ```{code-cell} ipython3
 %sql --append my_data
+```
+
+```{code-cell} ipython3
+%sql SELECT * FROM my_data
+```
+
+## Persist replace to table
+
+```{code-cell} ipython3
+my_data = pd.DataFrame({"x": range(3), "y": range(3)})
+```
+
+```{code-cell} ipython3
+%sql --persist-replace my_data --no-index
 ```
 
 ```{code-cell} ipython3

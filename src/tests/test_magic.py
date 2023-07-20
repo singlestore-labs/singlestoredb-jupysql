@@ -1,5 +1,6 @@
 import logging
 import platform
+import sqlite3
 from pathlib import Path
 import os.path
 import re
@@ -39,10 +40,19 @@ def test_print(ip):
     assert re.search(r"1\s+\|\s+foo", str(result))
 
 
-def test_plain_style(ip):
-    ip.run_line_magic("config", "SqlMagic.style = 'PLAIN_COLUMNS'")
+@pytest.mark.parametrize(
+    "style, expected",
+    [
+        ("'PLAIN_COLUMNS'", r"1\s+foo"),
+        ("'DEFAULT'", r" 1 \| foo  \|\n\|"),
+        ("'SINGLE_BORDER'", r"│\n├───┼──────┤\n│ 1 │ foo  │\n│"),
+        ("'MSWORD_FRIENDLY'", r"\n\| 1 \| foo  \|\n\|"),
+    ],
+)
+def test_styles(ip, style, expected):
+    ip.run_line_magic("config", f"SqlMagic.style = {style}")
     result = runsql(ip, "SELECT * FROM test;")
-    assert re.search(r"1\s+\|\s+foo", str(result))
+    assert re.search(expected, str(result))
 
 
 @pytest.mark.skip
@@ -75,7 +85,7 @@ def test_result_var(ip, capsys):
     assert "Returning data to local variable" not in out
 
 
-def test_result_var_link(ip, capsys):
+def test_result_var_link(ip):
     ip.run_cell_magic(
         "sql",
         "",
@@ -86,14 +96,16 @@ def test_result_var_link(ip, capsys):
         """,
     )
     result = ip.user_global_ns["x"]
-    out, _ = capsys.readouterr()
+
     assert (
         "<a href=https://en.wikipedia.org/wiki/Bertolt_Brecht>"
-        "https://en.wikipedia.org/wiki/Bertolt_Brecht</a>" in result._repr_html_()
-        and "<a href=https://en.wikipedia.org/wiki/William_Shakespeare>"
-        "https://en.wikipedia.org/wiki/William_Shakespeare</a>" in result._repr_html_()
-    )
-    assert "Returning data to local variable" not in out
+        "https://en.wikipedia.org/wiki/Bertolt_Brecht</a>"
+    ) in result._repr_html_()
+
+    assert (
+        "<a href=https://en.wikipedia.org/wiki/William_Shakespeare>"
+        "https://en.wikipedia.org/wiki/William_Shakespeare</a>"
+    ) in result._repr_html_()
     assert "<a href=google_link>google_link</a>" not in result._repr_html_()
 
 
@@ -110,34 +122,66 @@ def test_result_var_multiline_shovel(ip):
     assert "Shakespeare" in str(result) and "Brecht" in str(result)
 
 
-def test_return_result_var(ip, capsys):
-    # Assert that no result is returned when using regular result var syntax <<
-    result = ip.run_cell_magic(
-        "sql",
-        "",
-        """
-        sqlite://
-        x <<
-        SELECT last_name FROM author;
-        """,
-    )
+@pytest.mark.parametrize(
+    "sql_statement, expected_result",
+    [
+        (
+            """
+            sqlite://
+            x <<
+            SELECT last_name FROM author;
+            """,
+            None,
+        ),
+        (
+            """
+            sqlite://
+            x= <<
+            SELECT last_name FROM author;
+            """,
+            {"last_name": ("Shakespeare", "Brecht")},
+        ),
+        (
+            """
+            sqlite://
+            x = <<
+            SELECT last_name FROM author;
+            """,
+            {"last_name": ("Shakespeare", "Brecht")},
+        ),
+        (
+            """
+            sqlite://
+            x = <<
+            SELECT last_name FROM author;
+            """,
+            {"last_name": ("Shakespeare", "Brecht")},
+        ),
+        (
+            """
+            sqlite://
+            x =     <<
+            SELECT last_name FROM author;
+            """,
+            {"last_name": ("Shakespeare", "Brecht")},
+        ),
+        (
+            """
+            sqlite://
+            x      =     <<
+            SELECT last_name FROM author;
+            """,
+            {"last_name": ("Shakespeare", "Brecht")},
+        ),
+    ],
+)
+def test_return_result_var(ip, sql_statement, expected_result):
+    result = ip.run_cell_magic("sql", "", sql_statement)
     var = ip.user_global_ns["x"]
     assert "Shakespeare" in str(var) and "Brecht" in str(var)
-    assert result is None
-
-    # Assert that correct result is returned when using return result var syntax = <<
-    result = ip.run_cell_magic(
-        "sql",
-        "",
-        """
-        sqlite://
-        x= <<
-        SELECT last_name FROM author;
-        """,
-    )
-    var = ip.user_global_ns["x"]
-    assert "Shakespeare" in str(var) and "Brecht" in str(var)
-    assert result.dict() == {"last_name": ("Shakespeare", "Brecht")}
+    if result is not None:
+        result = result.dict()
+    assert result == expected_result
 
 
 def test_access_results_by_keys(ip):
@@ -185,6 +229,25 @@ def test_persist_no_index(ip):
     ip.run_cell("%sql --persist sqlite:// results_no_index --no-index")
     persisted = runsql(ip, "SELECT * FROM results_no_index")
     assert persisted == [(1, "foo"), (2, "bar")]
+
+
+@pytest.mark.parametrize(
+    "sql_statement, expected_error",
+    [
+        ("%%sql --arg\n SELECT * FROM test", "Unrecognized argument(s): --arg"),
+        ("%%sql -arg\n SELECT * FROM test", "Unrecognized argument(s): -arg"),
+        ("%%sql \n SELECT * FROM test", None),
+        ("%sql select * FROM test --some", None),
+        ("%%sql --persist '--some' \n SELECT * FROM test", "not a valid identifier"),
+    ],
+)
+def test_unrecognized_arguments_cell_magic(ip, sql_statement, expected_error):
+    result = ip.run_cell(sql_statement)
+
+    if expected_error:
+        assert expected_error in str(result.error_in_exec)
+    else:
+        assert result.error_in_exec is None
 
 
 def test_persist_invalid_identifier(ip):
@@ -494,8 +557,9 @@ def test_displaylimit_default(ip):
     ip.run_cell("%sql INSERT INTO number_table VALUES (4, 3)")
     ip.run_cell("%sql INSERT INTO number_table VALUES (4, 3)")
 
-    out = runsql(ip, "SELECT * FROM number_table;")
-    assert "truncated to displaylimit of 10" in out._repr_html_()
+    out = ip.run_cell("%sql SELECT * FROM number_table;").result
+
+    assert "Truncated to displaylimit of 10" in out._repr_html_()
 
 
 def test_displaylimit(ip):
@@ -506,6 +570,8 @@ def test_displaylimit(ip):
 
     assert "Brecht" in result._repr_html_()
     assert "Shakespeare" not in result._repr_html_()
+    assert "Brecht" in repr(result)
+    assert "Shakespeare" not in repr(result)
 
 
 @pytest.mark.parametrize("config_value, expected_length", [(3, 3), (6, 6)])
@@ -516,7 +582,7 @@ def test_displaylimit_enabled_truncated_length(ip, config_value, expected_length
 
     ip.run_cell(f"%config SqlMagic.displaylimit = {config_value}")
     out = runsql(ip, "SELECT * FROM number_table;")
-    assert f"truncated to displaylimit of {expected_length}" in out._repr_html_()
+    assert f"Truncated to displaylimit of {expected_length}" in out._repr_html_()
 
 
 @pytest.mark.parametrize("config_value", [(None), (0)])
@@ -530,7 +596,7 @@ def test_displaylimit_enabled_no_limit(
 
     ip.run_cell(f"%config SqlMagic.displaylimit = {config_value}")
     out = runsql(ip, "SELECT * FROM number_table;")
-    assert "truncated to displaylimit of " not in out._repr_html_()
+    assert "Truncated to displaylimit of " not in out._repr_html_()
 
 
 @pytest.mark.parametrize(
@@ -584,10 +650,7 @@ def test_displaylimit_with_conditional_clause(
         out = runsql(ip, query_clause)
 
     if expected_truncated_length:
-        assert (
-            f"{expected_truncated_length} rows, truncated to displaylimit of 10"
-            in out._repr_html_()
-        )
+        assert "Truncated to displaylimit of 10" in out._repr_html_()
 
 
 def test_column_local_vars(ip):
@@ -854,7 +917,7 @@ def test_alias_existing_engine(clean_conns, ip_empty, tmp_empty):
     assert {"one"} == set(Connection.connections)
 
 
-def test_alias_custom_connection(clean_conns, ip_empty, tmp_empty):
+def test_alias_dbapi_connection(clean_conns, ip_empty, tmp_empty):
     ip_empty.user_global_ns["first"] = create_engine("sqlite://")
     ip_empty.run_cell("%sql first --alias one")
     assert {"one"} == set(Connection.connections)
@@ -893,7 +956,7 @@ def test_close_connection_with_existing_engine_and_alias(ip, tmp_empty):
     assert "second" not in Connection.connections
 
 
-def test_close_connection_with_custom_connection_and_alias(ip, tmp_empty):
+def test_close_connection_with_dbapi_connection_and_alias(ip, tmp_empty):
     ip.user_global_ns["first"] = create_engine("sqlite:///first.db")
     ip.user_global_ns["second"] = create_engine("sqlite:///second.db")
 
@@ -909,6 +972,29 @@ def test_close_connection_with_custom_connection_and_alias(ip, tmp_empty):
     assert "sqlite:///second.db" not in Connection.connections
     assert "first" not in Connection.connections
     assert "second" not in Connection.connections
+
+
+def test_creator_no_argument_raises(ip_empty):
+    with pytest.raises(
+        UsageError, match="argument -c/--creator: expected one argument"
+    ):
+        ip_empty.run_line_magic("sql", "--creator")
+
+
+def test_creator(monkeypatch, ip_empty):
+    monkeypatch.setenv("DATABASE_URL", "sqlite:///")
+
+    def creator():
+        return sqlite3.connect("")
+
+    ip_empty.user_global_ns["func"] = creator
+    ip_empty.run_line_magic("sql", "--creator func")
+
+    result = ip_empty.run_line_magic(
+        "sql", "SELECT name FROM sqlite_schema WHERE type='table' ORDER BY name;"
+    )
+
+    assert isinstance(result, ResultSet)
 
 
 def test_column_names_visible(ip, tmp_empty):
@@ -1035,7 +1121,7 @@ invalid_connection_string_duckdb = f"""
 An error happened while creating the connection: connect(): incompatible function arguments. The following argument types are supported:
     1. (database: str = ':memory:', read_only: bool = False, config: dict = None) -> duckdb.DuckDBPyConnection
 
-Invoked with: kwargs: host='invalid_db'.
+Invoked with: kwargs: host='invalid_db', config={{}}.
 
 Perhaps you meant to use the 'duckdb' db 
 To find more information regarding connection: https://jupysql.ploomber.io/en/latest/integrations/duckdb.html
@@ -1052,7 +1138,6 @@ Pass a valid connection string:
 
 def test_error_on_invalid_connection_string_duckdb(ip_empty, clean_conns):
     result = ip_empty.run_cell("%sql duckdb://invalid_db")
-
     assert invalid_connection_string_duckdb.strip() == str(result.error_in_exec)
     assert isinstance(result.error_in_exec, UsageError)
 
@@ -1155,22 +1240,20 @@ def test_save_with_number_table(
 
 
 def test_save_with_non_existing_with(ip):
-    with pytest.warns(FutureWarning) as record:
-        ip.run_cell(
-            "%sql --with non_existing_sub_query " "SELECT * FROM non_existing_sub_query"
-        )
-    assert len(record) == 1
-    assert (
-        "CTE dependencies are now automatically inferred, you can omit the "
-        "--with arguments. Using --with will raise an exception in the next "
-        "major release so please remove it." in record[0].message.args[0]
+    out = ip.run_cell(
+        "%sql --with non_existing_sub_query " "SELECT * FROM non_existing_sub_query"
     )
+    assert isinstance(out.error_in_exec, UsageError)
 
 
-def test_save_with_non_existing_table(ip, capsys):
-    ip.run_cell("%sql --save my_query SELECT * FROM non_existing_table")
-    out, _ = capsys.readouterr()
-    assert "(sqlite3.OperationalError) no such table: non_existing_table" in out
+def test_save_with_non_existing_table(ip):
+    out = ip.run_cell("%sql --save my_query SELECT * FROM non_existing_table")
+
+    assert isinstance(out.error_in_exec, UsageError)
+    assert out.error_in_exec.error_type == "RuntimeError"
+    assert "(sqlite3.OperationalError) no such table: non_existing_table" in str(
+        out.error_in_exec
+    )
 
 
 def test_save_with_bad_query_save(ip, capsys):

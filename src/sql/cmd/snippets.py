@@ -1,6 +1,8 @@
-from sql.magic_cmd import CmdParser
 from sql import util
 from sql.exceptions import UsageError
+from sql.cmd.cmd_utils import CmdParser
+from sql.store import store
+from sql.display import Table, Message
 
 
 def _modify_display_msg(key, remaining_keys, dependent_keys=None):
@@ -30,14 +32,18 @@ def _modify_display_msg(key, remaining_keys, dependent_keys=None):
     return msg
 
 
-def sqlcmd_snippets(others):
+def snippets(others):
     """
-
-    Parameters
-    ----------
+    Implementation of `%sqlcmd snippets`
     This function handles all the arguments related to %sqlcmd snippets, namely
     listing stored snippets, and delete/ force delete/ force delete a snippet and
     all its dependent snippets.
+
+
+    Parameters
+    ----------
+    others : str,
+        A string containing the command line arguments.
 
     """
     parser = CmdParser()
@@ -58,10 +64,28 @@ def sqlcmd_snippets(others):
         help="Force delete all stored snippets",
         required=False,
     )
+    all_snippets = util.get_all_keys()
+    if len(others) == 1:
+        if others[0] in all_snippets:
+            return str(store[others[0]])
+
+        base_err_msg = f"'{others[0]}' is not a snippet. "
+        if len(all_snippets) == 0:
+            err_msg = "%sThere is no available snippet."
+        else:
+            err_msg = "%sAvailable snippets are " f"{util.pretty_print(all_snippets)}."
+        err_msg = err_msg % (base_err_msg)
+
+        raise UsageError(err_msg)
+
     args = parser.parse_args(others)
     SNIPPET_ARGS = [args.delete, args.delete_force, args.delete_force_all]
     if SNIPPET_ARGS.count(None) == len(SNIPPET_ARGS):
-        return ", ".join(util.get_all_keys())
+        if len(all_snippets) == 0:
+            return Message("No snippets stored")
+        else:
+            return Table(["Stored snippets"], [[snippet] for snippet in all_snippets])
+
     if args.delete:
         deps = util.get_key_dependents(args.delete)
         if deps:

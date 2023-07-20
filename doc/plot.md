@@ -131,6 +131,13 @@ We can see the highest value is a bit over 6, that's expected since we set a 6.3
 
 +++
 
+If you wish to specify the saved snippet explicitly, please use the `--with` argument. 
+[Click here](../compose) for more details on when to specify `--with` explicitly.
+
+```{code-cell} ipython3
+%sqlplot boxplot --table short_trips --column trip_distance --with short_trips
+```
+
 ## Histogram
 
 To create a histogram, call `%sqlplot histogram`, and pass the name of the table, the column you want to plot, and the number of bins. Similarly to what we did in the [Boxplot](#boxplot) example, JupySQL detects a saved snippet and only plots such data subset.
@@ -148,4 +155,20 @@ ax = %sqlplot histogram --table short_trips --column trip_distance --bins 50
 ax.grid()
 ax.set_title("Trip distance from trips < 6.3")
 _ = ax.set_xlabel("Trip distance")
+```
+
+## Bar plot
+
+To create a bar plot, call `%sqlplot bar`, and pass the name of the table and the column you want to plot. We will use the snippet created in the [Boxplot](#boxplot) example and JupySQL will plot for that subset of data. 
+
+```{code-cell} ipython3
+%sqlplot bar --table short_trips --column payment_type
+```
+
+## Pie plot
+
+To create a pie plot, call `%sqlplot pie`, and pass the name of the table and the column you want to plot. We will reuse the code snippet from the previous example on [Boxplot](#boxplot), and JupySQL will generate a plot for that specific subset of data.
+
+```{code-cell} ipython3
+%sqlplot pie --table short_trips --column payment_type
 ```

@@ -207,6 +207,9 @@ class Connection:
 
         self.connections[alias or self.url] = self
         self.connect_args = None
+
+        self._result_sets = []
+
         Connection.current = self
 
     @classmethod
@@ -359,17 +362,15 @@ class Connection:
         connect_args = connect_args or {}
 
         if descriptor:
-            is_custom_connection_ = Connection.is_custom_connection(descriptor)
-
+            is_dbapi_connection_ = Connection.is_dbapi_connection(descriptor)
             if isinstance(descriptor, Connection):
                 cls.current = descriptor
             elif isinstance(descriptor, Engine):
                 cls.current = Connection(descriptor, alias=alias)
-            elif is_custom_connection_:
-                cls.current = CustomConnection(descriptor, alias=alias)
+            elif is_dbapi_connection_:
+                cls.current = DBAPIConnection(descriptor, alias=alias)
             else:
                 existing = rough_dict_get(cls.connections, descriptor)
-
                 # NOTE: I added one indentation level, otherwise
                 # the "existing" variable would not exist if
                 # passing an engine object as descriptor.
@@ -377,12 +378,20 @@ class Connection:
                 # is that we're missing some unit tests
                 # when descriptor is a connection object
                 # http://docs.sqlalchemy.org/en/rel_0_9/core/engines.html#custom-dbapi-connect-arguments # noqa
-                cls.current = existing or Connection.from_connect_str(
-                    connect_str=descriptor,
-                    connect_args=connect_args,
-                    creator=creator,
-                    alias=alias,
-                )
+                # if same alias found
+                if existing and existing.alias == alias:
+                    cls.current = existing
+                # if just switching connections
+                elif existing and alias is None:
+                    cls.current = existing
+                # if new alias connection
+                elif existing is None or existing.alias != alias:
+                    cls.current = Connection.from_connect_str(
+                        connect_str=descriptor,
+                        connect_args=connect_args,
+                        creator=creator,
+                        alias=alias,
+                    )
 
         else:
             if cls.connections:
@@ -397,7 +406,6 @@ class Connection:
                 )
             else:
                 raise cls._error_no_connection()
-
         return cls.current
 
     @classmethod
@@ -455,7 +463,9 @@ class Connection:
         )
 
     @classmethod
-    def close(cls, descriptor):
+    def close_connection_with_descriptor(cls, descriptor):
+        """Close a connection with the given descriptor"""
+
         if isinstance(descriptor, Connection):
             conn = descriptor
         else:
@@ -474,25 +484,33 @@ class Connection:
             cls.connections.pop(
                 str(conn.metadata.bind.url) if IS_SQLALCHEMY_ONE else str(conn.url)
             )
-            conn.session.close()
+
+        conn.close()
+
+    def close(self):
+        """Close the current connection"""
+        for rs in self._result_sets:
+            rs._sqlaproxy.close()
+
+        self.session.close()
 
     @classmethod
     def close_all(cls, verbose=False):
-        """Close all active connections"""
+        """Close all connections"""
         connections = Connection.connections.copy()
-        for key, conn in connections.items():
-            conn.close(key)
+        for name, conn in connections.items():
+            conn.close()
 
             if verbose:
-                print(f"Closing {key}")
+                display.message(f"Closing {name}")
 
         cls.connections = {}
 
-    def is_custom_connection(conn=None) -> bool:
+    def is_dbapi_connection(conn=None) -> bool:
         """
         Checks if given connection is custom
         """
-        is_custom_connection_ = False
+        is_dbapi_connection_ = False
 
         if conn is None:
             if not Connection.current:
@@ -500,17 +518,17 @@ class Connection:
             else:
                 conn = Connection.current.session
 
-        if isinstance(conn, (CustomConnection, CustomSession)):
-            is_custom_connection_ = True
+        if isinstance(conn, (DBAPIConnection, DBAPISession)):
+            is_dbapi_connection_ = True
         else:
             if isinstance(
                 conn, (sqlalchemy.engine.base.Connection, Connection)
             ) or not (is_pep249_compliant(conn)):
-                is_custom_connection_ = False
+                is_dbapi_connection_ = False
             else:
-                is_custom_connection_ = True
+                is_dbapi_connection_ = True
 
-        return is_custom_connection_
+        return is_dbapi_connection_
 
     def _get_curr_sqlalchemy_connection_info(self):
         """Get the dialect, driver, and database server version info of current
@@ -537,6 +555,7 @@ class Connection:
             "server_version_info": getattr(engine.dialect, "server_version_info", None),
         }
 
+    # TODO: we have self.dialect and we also have this, which is confusing, see #732
     def _get_curr_sqlglot_dialect(self):
         """Get the dialect name in sqlglot package scope
 
@@ -591,7 +610,7 @@ class Connection:
         except ValueError:
             pass
         except AttributeError:
-            # this might be a custom connection..
+            # this might be a DBAPI connection
             pass
 
         return identifiers
@@ -634,7 +653,7 @@ class Connection:
 
         query = self._transpile_query(query)
 
-        if self.is_custom_connection():
+        if self.is_dbapi_connection():
             query = str(query)
         else:
             query = sqlalchemy.sql.text(query)
@@ -652,9 +671,9 @@ class Connection:
 atexit.register(Connection.close_all, verbose=True)
 
 
-class CustomSession(sqlalchemy.engine.base.Connection):
+class DBAPISession:
     """
-    Custom sql alchemy session
+    A session object for generic DBAPI connections
     """
 
     def __init__(self, connection, engine):
@@ -667,18 +686,23 @@ class CustomSession(sqlalchemy.engine.base.Connection):
             }
         )
 
+    # TODO: this will fail when using a duck native connection and a tmp
+    # table since the table will only be visible to the cursor
     def execute(self, query):
         cur = self.engine.cursor()
         cur.execute(query)
         return cur
 
+    def close(self):
+        pass
 
-class CustomConnection(Connection):
+
+class DBAPIConnection(Connection):
     """
-    Custom connection for unsupported drivers in sqlalchemy
+    A connection object for generic DBAPI connections
     """
 
-    @telemetry.log_call("CustomConnection", payload=True)
+    @telemetry.log_call("DBAPIConnection", payload=True)
     def __init__(self, payload, engine=None, alias=None):
         try:
             payload["engine"] = type(engine)
@@ -688,14 +712,27 @@ class CustomConnection(Connection):
         if engine is None:
             raise ValueError("Engine cannot be None")
 
-        connection_name_ = "custom_driver"
+        # detect if the engine is a native duckdb connection
+        _is_duckdb_native = _check_if_duckdb_dbapi_connection(engine)
+        connection_name_ = "duckdb" if _is_duckdb_native else "custom_driver"
+
         self.url = str(engine)
         self.name = connection_name_
         self.dialect = connection_name_
-        self.session = CustomSession(self, engine)
+        self.session = DBAPISession(self, engine)
 
         self.connections[alias or connection_name_] = self
 
         self.connect_args = None
         self.alias = alias
         Connection.current = self
+
+        # TODO: create an abstract class
+        self._result_sets = []
+
+
+def _check_if_duckdb_dbapi_connection(conn):
+    """Check if the connection is a native duckdb connection"""
+    # NOTE: duckdb defines df and pl to efficiently convert results to
+    # pandas.DataFrame and polars.DataFrame respectively
+    return hasattr(conn, "df") and hasattr(conn, "pl")
