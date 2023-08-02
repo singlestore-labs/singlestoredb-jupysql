@@ -1664,3 +1664,10 @@ def test_warning_if_variable_defined_but_named_param_is_quoted(
         match=expected_warning,
     ):
         ip.run_cell(cell)
+
+
+def test_displays_connection_name_when_running_query(ip, capsys):
+    ip.run_cell("%sql SELECT * FROM author")
+    out, _ = capsys.readouterr()
+
+    assert "Running query in 'sqlite://'" in out
