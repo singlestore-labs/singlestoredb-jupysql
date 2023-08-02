@@ -468,12 +468,15 @@ class SqlMagic(Magics, Configurable):
         # depending on the connect_arg value
         conn = sql.connection.ConnectionManager.set(
             connect_arg,
-            displaycon=self.displaycon,
             connect_args=args.connection_arguments,
             creator=args.creator,
             alias=args.alias,
             config=self,
         )
+
+        if self.displaycon:
+            sql.connection.ConnectionManager.display_current_connection()
+
         payload["connection_info"] = conn._get_database_information()
 
         if args.persist_replace and args.append:

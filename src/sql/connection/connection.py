@@ -144,7 +144,6 @@ class ConnectionManager:
     def set(
         cls,
         descriptor,
-        displaycon,
         connect_args=None,
         creator=None,
         alias=None,
@@ -197,11 +196,8 @@ class ConnectionManager:
                         config=config,
                     )
 
-        else:
-            if cls.connections:
-                if displaycon:
-                    cls.display_current_connection()
-            elif os.getenv("DATABASE_URL"):
+        elif not cls.connections:
+            if os.getenv("DATABASE_URL"):
                 cls.current = cls.from_connect_str(
                     connect_str=os.getenv("DATABASE_URL"),
                     connect_args=connect_args,
