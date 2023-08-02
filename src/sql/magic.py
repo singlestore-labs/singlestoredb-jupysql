@@ -466,6 +466,8 @@ class SqlMagic(Magics, Configurable):
 
         # this creates a new connection or use an existing one
         # depending on the connect_arg value
+        conn_id = id(sql.connection.ConnectionManager.current)
+
         conn = sql.connection.ConnectionManager.set(
             connect_arg,
             connect_args=args.connection_arguments,
@@ -474,7 +476,9 @@ class SqlMagic(Magics, Configurable):
             config=self,
         )
 
-        if self.displaycon:
+        is_new_connection = conn_id != id(sql.connection.ConnectionManager.current)
+
+        if self.displaycon and not is_new_connection:
             sql.connection.ConnectionManager.display_current_connection()
 
         payload["connection_info"] = conn._get_database_information()

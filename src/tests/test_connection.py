@@ -427,7 +427,7 @@ def test_create_connection_from_url(monkeypatch, url):
     connections = {}
     monkeypatch.setattr(ConnectionManager, "connections", connections)
 
-    conn = ConnectionManager.set(url, displaycon=False)
+    conn = ConnectionManager.set(url)
 
     assert connections == {url: conn}
     assert ConnectionManager.current == conn
@@ -444,8 +444,8 @@ def test_set_existing_connection(monkeypatch, url):
     connections = {}
     monkeypatch.setattr(ConnectionManager, "connections", connections)
 
-    ConnectionManager.set(url, displaycon=False)
-    conn = ConnectionManager.set(url, displaycon=False)
+    ConnectionManager.set(url)
+    conn = ConnectionManager.set(url)
 
     assert connections == {url: conn}
     assert ConnectionManager.current == conn
@@ -464,7 +464,7 @@ def test_set_engine(monkeypatch, url):
 
     engine = create_engine(url)
 
-    conn = ConnectionManager.set(engine, displaycon=False)
+    conn = ConnectionManager.set(engine)
 
     assert connections == {url: conn}
     assert ConnectionManager.current == conn
@@ -481,7 +481,7 @@ def test_set_dbapi(monkeypatch, callable_, key):
     connections = {}
     monkeypatch.setattr(ConnectionManager, "connections", connections)
 
-    conn = ConnectionManager.set(callable_(""), displaycon=False)
+    conn = ConnectionManager.set(callable_(""))
 
     assert connections == {key: conn}
     assert ConnectionManager.current == conn
@@ -491,7 +491,7 @@ def test_set_with_alias(monkeypatch):
     connections = {}
     monkeypatch.setattr(ConnectionManager, "connections", connections)
 
-    conn = ConnectionManager.set("sqlite://", displaycon=False, alias="some-sqlite-db")
+    conn = ConnectionManager.set("sqlite://", alias="some-sqlite-db")
 
     assert connections == {"some-sqlite-db": conn}
     assert ConnectionManager.current == conn
@@ -501,8 +501,8 @@ def test_set_and_load_with_alias(monkeypatch):
     connections = {}
     monkeypatch.setattr(ConnectionManager, "connections", connections)
 
-    ConnectionManager.set("sqlite://", displaycon=False, alias="some-sqlite-db")
-    conn = ConnectionManager.set("some-sqlite-db", displaycon=False)
+    ConnectionManager.set("sqlite://", alias="some-sqlite-db")
+    conn = ConnectionManager.set("some-sqlite-db")
 
     assert connections == {"some-sqlite-db": conn}
     assert ConnectionManager.current == conn
@@ -512,11 +512,9 @@ def test_set_same_url_different_alias(monkeypatch):
     connections = {}
     monkeypatch.setattr(ConnectionManager, "connections", connections)
 
-    some = ConnectionManager.set("sqlite://", displaycon=False, alias="some-sqlite-db")
-    another = ConnectionManager.set(
-        "sqlite://", displaycon=False, alias="another-sqlite-db"
-    )
-    conn = ConnectionManager.set("some-sqlite-db", displaycon=False)
+    some = ConnectionManager.set("sqlite://", alias="some-sqlite-db")
+    another = ConnectionManager.set("sqlite://", alias="another-sqlite-db")
+    conn = ConnectionManager.set("some-sqlite-db")
 
     assert connections == {"some-sqlite-db": some, "another-sqlite-db": another}
     assert ConnectionManager.current == conn
@@ -529,8 +527,8 @@ def test_same_alias(monkeypatch):
     connections = {}
     monkeypatch.setattr(ConnectionManager, "connections", connections)
 
-    conn = ConnectionManager.set("sqlite://", displaycon=False, alias="mydb")
-    second = ConnectionManager.set("mydb", displaycon=False, alias="mydb")
+    conn = ConnectionManager.set("sqlite://", alias="mydb")
+    second = ConnectionManager.set("mydb", alias="mydb")
 
     assert connections == {"mydb": conn}
     assert ConnectionManager.current == conn
@@ -542,7 +540,7 @@ def test_set_no_descriptor_and_no_active_connection(monkeypatch):
     monkeypatch.setattr(ConnectionManager, "connections", connections)
 
     with pytest.raises(UsageError) as excinfo:
-        ConnectionManager.set(descriptor=None, displaycon=False, alias=None)
+        ConnectionManager.set(descriptor=None, alias=None)
 
     assert "No active connection." in str(excinfo.value)
 
@@ -552,7 +550,7 @@ def test_set_no_descriptor_database_url(monkeypatch):
     monkeypatch.setitem(os.environ, "DATABASE_URL", "sqlite://")
     monkeypatch.setattr(ConnectionManager, "connections", connections)
 
-    conn = ConnectionManager.set(descriptor=None, displaycon=False)
+    conn = ConnectionManager.set(descriptor=None)
 
     assert connections == {"sqlite://": conn}
     assert ConnectionManager.current == conn
