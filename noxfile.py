@@ -132,6 +132,7 @@ def test_integration_cloud(session):
     # tests
     _install(session, integration=True)
     session.install("sqlalchemy<2")
+    _check_sqlalchemy(session, version=1)
     session.install("snowflake-sqlalchemy", "redshift-connector", "sqlalchemy-redshift")
     session.run(
         "pytest",
