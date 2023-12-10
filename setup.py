@@ -23,8 +23,8 @@ install_requires = [
     "sqlparse",
     "ipython-genutils>=0.1.0",
     "jinja2",
-    "sqlglot>=11.3.7",
-    "ploomber-core>=0.2.7",
+    "sqlglot>=11.3.7, <=19.0.0",
+    "ploomber-core @ git+https://github.com/neelasha23/core.git@modify_exception",
     'importlib-metadata;python_version<"3.8"',
     "jupysql-plugin",
 ]
