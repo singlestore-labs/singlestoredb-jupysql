@@ -1189,13 +1189,6 @@ def test_error_on_invalid_connection_string_format(ip_empty, clean_conns):
     assert invalid_connection_string_format.strip() == str(excinfo.value)
 
 
-def test_error_on_invalid_connection_string_format_duplicate(ip_empty, clean_conns):
-    with pytest.raises(UsageError) as excinfo:
-        ip_empty.run_cell("%sql something://")
-
-    assert invalid_connection_string_format.strip() == str(excinfo.value)
-
-
 def test_error_on_invalid_connection_string_with_existing_conns(ip_empty, clean_conns):
     ip_empty.run_cell("%sql sqlite://")
 
