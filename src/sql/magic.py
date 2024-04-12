@@ -54,6 +54,8 @@ except ModuleNotFoundError:
     DataFrame = None
     Series = None
 
+from sql.telemetry import telemetry
+
 
 SUPPORT_INTERACTIVE_WIDGETS = ["Checkbox", "Text", "IntSlider", ""]
 IF_NOT_SELECT_MESSAGE = "The query is not a SELECT type query and as \
