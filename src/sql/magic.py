@@ -54,8 +54,6 @@ except ModuleNotFoundError:
     DataFrame = None
     Series = None
 
-from sql.telemetry import telemetry
-
 
 SUPPORT_INTERACTIVE_WIDGETS = ["Checkbox", "Text", "IntSlider", ""]
 IF_NOT_SELECT_MESSAGE = "The query is not a SELECT type query and as \
@@ -81,7 +79,6 @@ class RenderMagic(Magics):
         action="append",
         dest="with_",
     )
-    @telemetry.log_call("sqlrender")
     def sqlrender(self, line):
         args = parse_argstring(self.sqlrender, line)
         warnings.warn(
@@ -370,14 +367,14 @@ class SqlMagic(Magics, Configurable):
             line=line, cell=cell, local_ns=local_ns, is_interactive_mode=False
         )
 
-    @telemetry.log_call("execute", payload=True)
     @modify_exceptions
-    def _execute(self, payload, line, cell, local_ns, is_interactive_mode=False):
+    def _execute(self, line, cell, local_ns, is_interactive_mode=False):
         """
         This function implements the cell logic; we create this private
         method so we can control how the function is called. Otherwise,
         decorating ``SqlMagic.execute`` will break when adding the ``@log_call``
-        decorator with ``payload=True``
+        decorator with ``payload=True`` (NOTE that we have removed the telemetry
+        call, we can refactor this)
         """
 
         def interactive_execute_wrapper(**kwargs):
@@ -518,7 +515,6 @@ class SqlMagic(Magics, Configurable):
             alias=args.section if args.section else args.alias,
             config=self,
         )
-        payload["connection_info"] = conn._get_database_information()
 
         if args.persist_replace and args.append:
             raise exceptions.UsageError(
