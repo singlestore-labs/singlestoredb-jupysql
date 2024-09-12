@@ -1,6 +1,6 @@
 # CHANGELOG
 
-## 0.10.13dev
+## 0.10.13 (2024-09-12)
 
 * [Feature] `ploomber-extension` is no longer a dependency
 
