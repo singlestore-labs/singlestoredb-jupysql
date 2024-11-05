@@ -1,5 +1,7 @@
 # CHANGELOG
 
+## 0.10.16dev
+
 ## 0.10.15 (2024-11-05)
 
 *Drops compatibility with Python 3.8*
