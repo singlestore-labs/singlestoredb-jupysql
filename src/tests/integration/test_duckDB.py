@@ -235,3 +235,18 @@ def test_commits_all_statements(ip, sql, request):
     out = ip.run_cell(sql)
     assert out.error_in_exec is None
     assert out.result.dict() == {"x": (1, 2)}
+
+
+@pytest.mark.parametrize(
+    "ip",
+    [
+        "ip_with_duckdb_native_empty",
+        "ip_with_duckdb_sqlalchemy_empty",
+    ],
+)
+def test_can_query_existing_df(ip, request):
+    ip = request.getfixturevalue(ip)
+    df = pd.DataFrame({"city": ["NYC"]})  # noqa
+    ip.run_cell("%sql SET python_scan_all_frames=true")
+    out = ip.run_cell("%sql SELECT * FROM df;")
+    assert out.result.dict() == {"city": ("NYC",)}

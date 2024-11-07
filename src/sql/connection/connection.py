@@ -991,9 +991,9 @@ class DBAPIConnection(AbstractConnection):
 
     def __init__(self, connection, alias=None, config=None):
         # detect if the engine is a native duckdb connection
-        _is_duckdb_native = _check_if_duckdb_dbapi_connection(connection)
+        self._is_duckdb_native = _check_if_duckdb_dbapi_connection(connection)
 
-        self._dialect = "duckdb" if _is_duckdb_native else None
+        self._dialect = "duckdb" if self._is_duckdb_native else None
         self._driver = None
 
         # TODO: implement the dialect blacklist and add unit tests
@@ -1038,6 +1038,15 @@ class DBAPIConnection(AbstractConnection):
             query = self._resolve_cte(query, with_)
 
         cur = self._connection.cursor()
+
+        # NOTE: this is a workaround for duckdb 1.1.0 and higher so we keep the
+        # existing behavior of being able to query data frames
+        if self._is_duckdb_native:
+            try:
+                cur.execute("SET python_scan_all_frames=true")
+            except Exception:
+                pass
+
         cur.execute(query)
 
         if self._requires_manual_commit:
