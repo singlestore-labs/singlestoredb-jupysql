@@ -1,6 +1,6 @@
 # CHANGELOG
 
-## 0.10.16dev
+## 0.10.16 (2024-11-07)
 
 * [Fix] Updates docs for querying data frames when using DuckDB SQLAlchemy connections
 * [Fix] Support for scanning data frames when using native DuckDB connections due to changes in DuckDB's API
