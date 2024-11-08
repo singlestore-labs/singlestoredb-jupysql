@@ -3,17 +3,17 @@ document.addEventListener("DOMContentLoaded", (event) => {
         {
             text: "Deploy Streamlit apps for free on ",
             link: "Ploomber Cloud!",
-            url: "https://platform.ploomber.io/register/?utm_medium=readthedocs&utm_source=jupysql",
+            url: "https://platform.ploomber.io/register/?utm_medium=readthedocs&utm_source=jupysql&onboarding=streamlit",
         },
         {
             text: "Deploy Shiny apps for free on ",
             link: "Ploomber Cloud!",
-            url: "https://platform.ploomber.io/register/?utm_medium=readthedocs&utm_source=jupysql",
+            url: "https://platform.ploomber.io/register/?utm_medium=readthedocs&utm_source=jupysql&onboarding=shiny-r",
         },
         {
             text: "Deploy Dash apps for free on ",
             link: "Ploomber Cloud!",
-            url: "https://platform.ploomber.io/register/?utm_medium=readthedocs&utm_source=jupysql",
+            url: "https://platform.ploomber.io/register/?utm_medium=readthedocs&utm_source=jupysql&onboarding=dash",
         },
         {
             text: "Try our new Streamlit ",
