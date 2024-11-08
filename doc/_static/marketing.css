@@ -1,0 +1,28 @@
+.bd-header-announcement {
+    color: white;
+    padding: 8px;
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+}
+
+.bd-header-announcement a {
+    color: white;
+    font-weight: bold;
+    text-decoration: underline;
+    animation: pulse 4s infinite;
+}
+
+@keyframes pulse {
+    0% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.5;
+    }
+
+    100% {
+        opacity: 1;
+    }
+}
