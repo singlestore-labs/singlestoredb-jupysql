@@ -22,7 +22,7 @@ class SQLCommand:
 
     """
 
-    def __init__(self, magic, user_ns, line, cell) -> None:
+    def __init__(self, magic, user_ns, line, cell, connection=None) -> None:
         self._line = line
         self._cell = cell
 
@@ -88,6 +88,9 @@ class SQLCommand:
 
         if add_alias:
             self.parsed["connection"] = self.args.line[0]
+
+        if connection is not None:
+            self.parsed['connection'] = connection
 
         if self.args.with_:
             self.args.with_ = [
