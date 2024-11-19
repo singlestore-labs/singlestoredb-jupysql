@@ -335,7 +335,7 @@ class SqlMagic(Magics, Configurable):
         action="append",
         help="Interactive mode",
     )
-    def execute(self, line="", cell="", local_ns=None):
+    def execute(self, line="", cell="", local_ns=None, connection=None):
         """
         Runs SQL statement against a database, specified by
         SQLAlchemy connect string.
@@ -363,16 +363,19 @@ class SqlMagic(Magics, Configurable):
 
         """
         return self._execute(
-            line=line, cell=cell, local_ns=local_ns, is_interactive_mode=False
+            line=line, cell=cell, local_ns=local_ns, is_interactive_mode=False, connection=connection
         )
 
     @modify_exceptions
-    def _execute(self, line, cell, local_ns, is_interactive_mode=False):
+    def _execute(self, line, cell, local_ns, is_interactive_mode=False, connection=None):
         """
         This function implements the cell logic; we create this private
         method so we can control how the function is called. Otherwise,
         decorating ``SqlMagic.execute`` will break when adding the ``@log_call``
         decorator with ``payload=True``
+
+        ``connection`` is any [DBAPI v2](https://peps.python.org/pep-0249/) compatible connection object.
+        If provided, it will override any other connection configuration.
 
         NOTE: telemetry has been removed, we can remove this function
         """
@@ -401,7 +404,7 @@ class SqlMagic(Magics, Configurable):
         user_ns = self.shell.user_ns.copy()
         user_ns.update(local_ns)
 
-        command = SQLCommand(self, user_ns, line, cell)
+        command = SQLCommand(self, user_ns, line, cell, connection)
         # args.line: contains the line after the magic with all options removed
 
         args = command.args
