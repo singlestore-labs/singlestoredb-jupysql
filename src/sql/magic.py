@@ -363,11 +363,17 @@ class SqlMagic(Magics, Configurable):
 
         """
         return self._execute(
-            line=line, cell=cell, local_ns=local_ns, is_interactive_mode=False, connection=connection
+            line=line,
+            cell=cell,
+            local_ns=local_ns,
+            is_interactive_mode=False,
+            connection=connection,
         )
 
     @modify_exceptions
-    def _execute(self, line, cell, local_ns, is_interactive_mode=False, connection=None):
+    def _execute(
+        self, line, cell, local_ns, is_interactive_mode=False, connection=None
+    ):
         """
         This function implements the cell logic; we create this private
         method so we can control how the function is called. Otherwise,
