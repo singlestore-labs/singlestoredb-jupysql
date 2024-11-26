@@ -90,7 +90,7 @@ class SQLCommand:
             self.parsed["connection"] = self.args.line[0]
 
         if connection is not None:
-            self.parsed['connection'] = connection
+            self.parsed["connection"] = connection
 
         if self.args.with_:
             self.args.with_ = [
