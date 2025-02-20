@@ -113,7 +113,7 @@ class ResultSetCollection:
 
     def append(self, result):
         map(self._result_sets.pop, reversed(
-            for i, item in enumerate(self._result_sets):
+            i for i, item in enumerate(self._result_sets)
             if result == item
         ))
 
